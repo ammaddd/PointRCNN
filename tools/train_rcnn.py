@@ -1,3 +1,4 @@
+from comet_ml import Experiment
 import _init_path
 import torch
 import torch.optim as optim
@@ -144,6 +145,8 @@ def create_scheduler(optimizer, total_steps, last_epoch):
 
 
 if __name__ == "__main__":
+    experiment = Experiment(auto_metric_logging=False)
+    experiment.log_code('train_utils/train_utils.py')
     if args.cfg_file is not None:
         cfg_from_file(args.cfg_file)
     cfg.TAG = os.path.splitext(os.path.basename(args.cfg_file))[0]
@@ -177,8 +180,10 @@ if __name__ == "__main__":
 
     for key, val in vars(args).items():
         logger.info("{:16} {}".format(key, val))
+    experiment.log_others(vars(args))
 
     save_config_to_file(cfg, logger=logger)
+    experiment.log_asset(args.cfg_file, 'cfg.yaml')
 
     # copy important files to backup
     backup_dir = os.path.join(root_result_dir, 'backup_files')
@@ -237,7 +242,8 @@ if __name__ == "__main__":
         eval_frequency=1,
         lr_warmup_scheduler=lr_warmup_scheduler,
         warmup_epoch=cfg.TRAIN.WARMUP_EPOCH,
-        grad_norm_clip=cfg.TRAIN.GRAD_NORM_CLIP
+        grad_norm_clip=cfg.TRAIN.GRAD_NORM_CLIP,
+        experiment=experiment
     )
 
     trainer.train(

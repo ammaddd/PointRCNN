@@ -114,7 +114,7 @@ def load_part_ckpt(model, filename, logger=cur_logger, total_keys=-1):
 class Trainer(object):
     def __init__(self, model, model_fn, optimizer, ckpt_dir, lr_scheduler, bnm_scheduler,
                  model_fn_eval, tb_log, eval_frequency=1, lr_warmup_scheduler=None, warmup_epoch=-1,
-                 grad_norm_clip=1.0):
+                 grad_norm_clip=1.0, experiment=None):
         self.model, self.model_fn, self.optimizer, self.lr_scheduler, self.bnm_scheduler, self.model_fn_eval = \
             model, model_fn, optimizer, lr_scheduler, bnm_scheduler, model_fn_eval
 
@@ -124,6 +124,7 @@ class Trainer(object):
         self.lr_warmup_scheduler = lr_warmup_scheduler
         self.warmup_epoch = warmup_epoch
         self.grad_norm_clip = grad_norm_clip
+        self._experiment = experiment
 
     def _train_it(self, batch):
         self.model.train()
@@ -182,6 +183,9 @@ class Trainer(object):
                 if self.bnm_scheduler is not None:
                     self.bnm_scheduler.step(it)
                     self.tb_log.add_scalar('bn_momentum', self.bnm_scheduler.lmbd(epoch), it)
+                    self._experiment.log_metric('bn_momentum',self.
+                                                bnm_scheduler.lmbd(epoch),
+                                                step=it, epoch=epoch)
 
                 # train one epoch
                 for cur_it, batch in enumerate(train_loader):
@@ -189,6 +193,9 @@ class Trainer(object):
                         self.lr_scheduler.step(it)
                         cur_lr = float(self.optimizer.lr)
                         self.tb_log.add_scalar('learning_rate', cur_lr, it)
+                        self._experiment.log_metric('learning_rate',
+                                                    cur_lr, step=it,
+                                                    epoch=epoch)
                     else:
                         if self.lr_warmup_scheduler is not None and epoch < self.warmup_epoch:
                             self.lr_warmup_scheduler.step(it)
@@ -210,8 +217,16 @@ class Trainer(object):
                     if self.tb_log is not None:
                         self.tb_log.add_scalar('train_loss', loss, it)
                         self.tb_log.add_scalar('learning_rate', cur_lr, it)
+                        self._experiment.log_metric('train_loss', loss,
+                                                    step=it, epoch=epoch)
+                        self._experiment.log_metric('learning_rate',
+                                                    cur_lr, step=it,
+                                                    epoch=epoch)
                         for key, val in tb_dict.items():
                             self.tb_log.add_scalar('train_' + key, val, it)
+                            self._experiment.log_metric('train_' + key,
+                                                        val, step=it,
+                                                        epoch=epoch)
 
                 # save trained model
                 trained_epoch = epoch + 1
@@ -220,6 +235,7 @@ class Trainer(object):
                     save_checkpoint(
                         checkpoint_state(self.model, self.optimizer, trained_epoch, it), filename=ckpt_name,
                     )
+                    self._experiment.log_model("PointRCNN", '{}.pth'.format(ckpt_name))
 
                 # eval one epoch
                 if (epoch % eval_frequency) == 0:
@@ -230,8 +246,15 @@ class Trainer(object):
 
                         if self.tb_log is not None:
                             self.tb_log.add_scalar('val_loss', val_loss, it)
+                            self._experiment.log_metric('val_loss',
+                                                        val_loss,
+                                                        step=it,
+                                                        epoch=epoch)
                             for key, val in eval_dict.items():
                                 self.tb_log.add_scalar('val_' + key, val, it)
+                                self._experiment.log_metric('val_' + key,
+                                                            val, step=it,
+                                                            epoch=epoch)
 
                 pbar.close()
                 pbar = tqdm.tqdm(total=len(train_loader), leave=False, desc='train')
