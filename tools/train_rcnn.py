@@ -1,3 +1,4 @@
+from tools.train_utils.comet_utils import CometLogger
 import _init_path
 import torch
 import torch.optim as optim
@@ -45,6 +46,8 @@ parser.add_argument("--rcnn_eval_roi_dir", type=str, default=None,
                     help='specify the saved rois for rcnn evaluation when using rcnn_offline mode')
 parser.add_argument("--rcnn_eval_feature_dir", type=str, default=None,
                     help='specify the saved features for rcnn evaluation when using rcnn_offline mode')
+parser.add_argument('--comet', type=bool, default=False,
+                    help='enable comet logging (if comet installed)')
 args = parser.parse_args()
 
 
@@ -144,6 +147,8 @@ def create_scheduler(optimizer, total_steps, last_epoch):
 
 
 if __name__ == "__main__":
+    comet_logger = CometLogger(args.comet, auto_metric_logging=False)
+    comet_logger.log_code('train_utils/train_utils.py')
     if args.cfg_file is not None:
         cfg_from_file(args.cfg_file)
     cfg.TAG = os.path.splitext(os.path.basename(args.cfg_file))[0]
@@ -177,8 +182,10 @@ if __name__ == "__main__":
 
     for key, val in vars(args).items():
         logger.info("{:16} {}".format(key, val))
+    comet_logger.log_others(vars(args))
 
     save_config_to_file(cfg, logger=logger)
+    comet_logger.log_asset(args.cfg_file, 'cfg.yaml')
 
     # copy important files to backup
     backup_dir = os.path.join(root_result_dir, 'backup_files')
@@ -237,7 +244,8 @@ if __name__ == "__main__":
         eval_frequency=1,
         lr_warmup_scheduler=lr_warmup_scheduler,
         warmup_epoch=cfg.TRAIN.WARMUP_EPOCH,
-        grad_norm_clip=cfg.TRAIN.GRAD_NORM_CLIP
+        grad_norm_clip=cfg.TRAIN.GRAD_NORM_CLIP,
+        comet_logger=comet_logger
     )
 
     trainer.train(
